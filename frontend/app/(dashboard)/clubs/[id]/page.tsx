@@ -34,7 +34,7 @@ import {
   Check,
   Pencil,
 } from "lucide-react"
-import { client, type Club, type ClubMember, type Member } from "@/lib/sdk/client"
+import { apiClient as client, type Club, type ClubMember, type Member } from "@/lib/sdk/api-client"
 import { toast } from "sonner"
 
 export default function ClubDetailPage() {

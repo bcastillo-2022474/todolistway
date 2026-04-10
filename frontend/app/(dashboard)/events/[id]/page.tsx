@@ -26,7 +26,7 @@ import {
   Layers,
   Trash2,
 } from "lucide-react"
-import { client, type Event, type Club } from "@/lib/sdk/client"
+import { apiClient as client, type Event, type Club } from "@/lib/sdk/api-client"
 import { toast } from "sonner"
 
 type EventWithClub = Event & { club?: Pick<Club, 'id' | 'name'> }

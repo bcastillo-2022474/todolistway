@@ -21,7 +21,7 @@ import {
   MapPin,
   Clock
 } from "lucide-react"
-import { client, type Club } from "@/lib/sdk/client"
+import { apiClient as client, type Club } from "@/lib/sdk/api-client"
 import { toast } from "sonner"
 
 export default function ClubsPage() {

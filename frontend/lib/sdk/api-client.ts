@@ -165,3 +165,5 @@ export const apiClient = {
   events: eventsModule,
   admin: adminModule,
 }
+
+export * from './types'
