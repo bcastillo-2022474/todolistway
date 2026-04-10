@@ -1,4 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import pool from '../config/database'
+import { Club, AppError } from '../types';
 
 const router = Router();
 
@@ -7,41 +9,148 @@ const router = Router();
 // GET /api/v1/clubs?page&limit&search
 router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // TODO: implement
-    res.json({ data: [], total: 0, page: 1, limit: 10, total_pages: 0 });
-  } catch (err) { next(err); }
+    const page  = Math.max(1, parseInt(_req.query.page  as string) || 1);
+    const limit = Math.max(1, parseInt(_req.query.limit as string) || 10);
+    const search = (_req.query.search as string)?.trim() ?? '';
+    const offset = (page - 1) * limit;
+ 
+    const whereClause = search ? `WHERE c.name ILIKE $1 OR c.description ILIKE $1` : '';
+    const params: (string | number)[] = search ? [`%${search}%`, limit, offset] : [limit, offset];
+    const limitIdx  = search ? 2 : 1;
+    const offsetIdx = search ? 3 : 2;
+ 
+    const dataQuery = `
+      SELECT
+        c.id, c.name, c.description, c.schedule, c.location, c.created_at,
+        (SELECT COUNT(*) FROM club_member cm WHERE cm.id_club = c.id)::int AS member_count
+      FROM club c
+      ${whereClause}
+      ORDER BY c.created_at DESC
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}
+    `;
+ 
+    const countQuery = `
+      SELECT COUNT(*) FROM club c ${whereClause}
+    `;
+ 
+    const countParams = search ? [`%${search}%`] : [];
+ 
+    const [dataResult, countResult] = await Promise.all([
+      pool.query<Club>(dataQuery, params),
+      pool.query<{ count: string }>(countQuery, countParams),
+    ]);
+ 
+    const total       = parseInt(countResult.rows[0].count);
+    const total_pages = Math.ceil(total / limit);
+ 
+    res.json({ data: dataResult.rows, total, page, limit, total_pages });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // GET /api/v1/clubs/:id
 router.get('/:id', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // TODO: implement
-    res.json({ data: null });
-  } catch (err) { next(err); }
+    const { id } = _req.params;
+ 
+    const result = await pool.query<Club>(
+      `SELECT
+         c.id, c.name, c.description, c.schedule, c.location, c.created_at,
+         (SELECT COUNT(*) FROM club_member cm WHERE cm.id_club = c.id)::int AS member_count
+       FROM club c
+       WHERE c.id = $1`,
+      [id],
+    );
+ 
+    if (!result.rows[0]) {
+      throw new AppError('Club not found', 404, 'CLUB_NOT_FOUND');
+    }
+ 
+    res.json({ data: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // POST /api/v1/clubs  — body: { name, description, schedule, location }
 router.post('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // TODO: implement
-    res.status(201).json({ data: null, message: 'Club created successfully' });
-  } catch (err) { next(err); }
+    const { name, description, schedule, location } = _req.body;
+ 
+    // ── validation ────────────────────────────────────────────────────────────
+    const errors: Record<string, string> = {};
+    if (!name        || typeof name        !== 'string') errors.name        = 'name is required';
+    else if (name.length        > 150)                  errors.name        = 'name must be at most 150 characters';
+    if (!description || typeof description !== 'string') errors.description = 'description is required';
+    else if (description.length > 500)                  errors.description = 'description must be at most 500 characters';
+    if (!schedule    || typeof schedule    !== 'string') errors.schedule    = 'schedule is required';
+    else if (schedule.length    > 100)                  errors.schedule    = 'schedule must be at most 100 characters';
+    if (!location    || typeof location    !== 'string') errors.location    = 'location is required';
+    else if (location.length    > 150)                  errors.location    = 'location must be at most 150 characters';
+ 
+    if (Object.keys(errors).length) {
+      throw new AppError('Validation error', 400, 'VALIDATION_ERROR', errors);
+    }
+ 
+    const result = await pool.query<Club>(
+      `INSERT INTO club (name, description, schedule, location)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [name, description, schedule, location],
+    );
+ 
+    res.status(201).json({ data: result.rows[0], message: 'Club created successfully' });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // PUT /api/v1/clubs/:id
 router.put('/:id', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // TODO: implement
-    res.json({ data: null, message: 'Club updated successfully' });
-  } catch (err) { next(err); }
+    const { id } = _req.params;
+    const { name, description, schedule, location } = _req.body;
+ 
+    const result = await pool.query<Club>(
+      `UPDATE club SET
+         name        = COALESCE($1, name),
+         description = COALESCE($2, description),
+         schedule    = COALESCE($3, schedule),
+         location    = COALESCE($4, location)
+       WHERE id = $5
+       RETURNING *`,
+      [name ?? null, description ?? null, schedule ?? null, location ?? null, id],
+    );
+ 
+    if (!result.rows[0]) {
+      throw new AppError('Club not found', 404, 'CLUB_NOT_FOUND');
+    }
+ 
+    res.json({ data: result.rows[0], message: 'Club updated successfully' });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // DELETE /api/v1/clubs/:id
 router.delete('/:id', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // TODO: implement
-    res.json({ message: 'Club deleted successfully', deleted_id: null });
-  } catch (err) { next(err); }
+    const { id } = _req.params;
+ 
+    const result = await pool.query<Club>(
+      `DELETE FROM club WHERE id = $1 RETURNING id`,
+      [id],
+    );
+ 
+    if (!result.rows[0]) {
+      throw new AppError('Club not found', 404, 'CLUB_NOT_FOUND');
+    }
+ 
+    res.json({ message: 'Club deleted successfully', deleted_id: result.rows[0].id });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ── Club members ──────────────────────────────────────────────────────────────
