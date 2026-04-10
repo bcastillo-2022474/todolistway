@@ -58,13 +58,26 @@ pnpm dev
 | `PUT /members/:id` | Update name/lastname with `COALESCE`. 404 if not found |
 | `DELETE /members/:id` | Check no rows in `club_member` first (throw `AppError(409, 'MEMBER_HAS_CLUBS')`), then delete |
 
-### Admin endpoints
+### Admin auth — ✅ already implemented
 
-| Route | What to implement |
-|-------|-------------------|
-| `POST /admin/login` | Find admin by email, `bcrypt.compare` password, sign JWT with `{ id, email }` and `process.env.JWT_SECRET`, return token |
-| `POST /admin/logout` | Stateless JWT — just return `{ message: 'Logout successful' }` (client drops the token) |
-| `GET /admin/me` | Already protected by `requireAuth`. Query admin by `req.admin.id`, return without password field |
+> `backend/src/routes/admin.ts` is done. No work needed here. Read this so you understand how auth works when protecting your own routes.
+
+There is no user table and no email/password system. Auth works like this:
+
+1. The backend has a single password stored in `.env` as `ADMIN_PASSWORD`
+2. The frontend POSTs `{ password }` to `/api/v1/admin/login`
+3. The backend compares it with `process.env.ADMIN_PASSWORD`. If it matches, it signs a JWT with `{ role: 'admin' }` using `JWT_SECRET` and returns `{ data: { token } }`
+4. The frontend stores the token and sends it as `Authorization: Bearer <token>` on subsequent requests
+
+**If you need to protect a route**, import `requireAuth` and use it as middleware:
+
+```ts
+import { requireAuth } from '../middleware/auth';
+
+router.delete('/:id', requireAuth, async (req, res, next) => { ... })
+```
+
+The middleware verifies the JWT and attaches `req.admin = { role: 'admin' }` to the request. If the token is missing or invalid it responds 401 automatically — you don't need to handle it.
 
 **Tip:** `pool` is imported from `../config/database`. All handlers already have `try/catch → next(err)`.
 
