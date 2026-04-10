@@ -24,6 +24,7 @@ import {
   Users
 } from "lucide-react"
 import { apiClient as client, type Event, type Club } from "@/lib/sdk/api-client"
+import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 
 type EventWithClub = Event & { club?: Pick<Club, 'id' | 'name'> }
@@ -32,6 +33,7 @@ export default function EventsPage() {
   const [events, setEvents] = useState<EventWithClub[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  const debouncedSearch = useDebounce(search)
   const [statusFilter, setStatusFilter] = useState<string>("all")
 
   // Create dialog
@@ -47,13 +49,13 @@ export default function EventsPage() {
 
   useEffect(() => {
     loadData()
-  }, [search, statusFilter])
+  }, [debouncedSearch, statusFilter])
 
   async function loadData() {
     setLoading(true)
     try {
       const upcoming = statusFilter === "upcoming" ? true : undefined
-      const response = await client.events.list({ search, upcoming, limit: 50 })
+      const response = await client.events.list({ search: debouncedSearch, upcoming, limit: 50 })
       setEvents(response.data)
     } finally {
       setLoading(false)

@@ -22,12 +22,14 @@ import {
   Clock
 } from "lucide-react"
 import { apiClient as client, type Club } from "@/lib/sdk/api-client"
+import { useDebounce } from "@/hooks/use-debounce"
 import { toast } from "sonner"
 
 export default function ClubsPage() {
   const [clubs, setClubs] = useState<Club[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  const debouncedSearch = useDebounce(search)
 
   // Create dialog
   const [open, setOpen] = useState(false)
@@ -39,11 +41,11 @@ export default function ClubsPage() {
 
   useEffect(() => {
     loadClubs()
-  }, [search])
+  }, [debouncedSearch])
 
   async function loadClubs() {
     try {
-      const response = await client.clubs.list({ search, limit: 20 })
+      const response = await client.clubs.list({ search: debouncedSearch, limit: 20 })
       setClubs(response.data)
     } finally {
       setLoading(false)
