@@ -1,7 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express'
-import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
-import pool from '../config/database'
 import { AppError } from '../types'
 import { requireAuth } from '../middleware/auth'
 
