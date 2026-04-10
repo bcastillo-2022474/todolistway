@@ -5,32 +5,70 @@ import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { 
-  Layers, 
-  Users, 
-  Search, 
-  Plus, 
-  MapPin, 
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Layers,
+  Users,
+  Search,
+  Plus,
+  MapPin,
   Clock
 } from "lucide-react"
 import { client, type Club } from "@/lib/sdk/client"
+import { toast } from "sonner"
 
 export default function ClubsPage() {
   const [clubs, setClubs] = useState<Club[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
 
+  // Create dialog
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [schedule, setSchedule] = useState("")
+  const [location, setLocation] = useState("")
+
   useEffect(() => {
-    async function loadClubs() {
-      try {
-        const response = await client.clubs.list({ search, limit: 20 })
-        setClubs(response.data)
-      } finally {
-        setLoading(false)
-      }
-    }
     loadClubs()
   }, [search])
+
+  async function loadClubs() {
+    try {
+      const response = await client.clubs.list({ search, limit: 20 })
+      setClubs(response.data)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function openCreate() {
+    setName(""); setDescription(""); setSchedule(""); setLocation("")
+    setOpen(true)
+  }
+
+  async function handleCreate() {
+    if (!name.trim() || !description.trim() || !schedule.trim() || !location.trim()) return
+    setSaving(true)
+    try {
+      await client.clubs.create({ name: name.trim(), description: description.trim(), schedule: schedule.trim(), location: location.trim() })
+      toast.success("Club creado")
+      setOpen(false)
+      loadClubs()
+    } catch {
+      toast.error("Error al crear el club")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -39,13 +77,12 @@ export default function ClubsPage() {
           <h1 className="text-3xl font-bold text-foreground">Clubes</h1>
           <p className="text-muted-foreground mt-1">Gestiona los clubes y sus miembros</p>
         </div>
-        <Button className="bg-[#0D5E32] text-white hover:bg-[#0D5E32]/90">
+        <Button onClick={openCreate} className="bg-[#0D5E32] text-white hover:bg-[#0D5E32]/90">
           <Plus className="mr-2 h-4 w-4" />
           Nuevo Club
         </Button>
       </div>
 
-      {/* Search */}
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -56,7 +93,6 @@ export default function ClubsPage() {
         />
       </div>
 
-      {/* Clubs Grid */}
       {loading ? (
         <div className="flex items-center justify-center h-[30vh]">
           <div className="animate-pulse text-muted-foreground">Cargando clubes...</div>
@@ -104,6 +140,42 @@ export default function ClubsPage() {
           <p className="text-muted-foreground">Intenta con otra búsqueda o crea un nuevo club</p>
         </div>
       )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuevo Club</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Nombre</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Club de Robótica" />
+            </div>
+            <div className="space-y-2">
+              <Label>Descripción</Label>
+              <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descripción del club" />
+            </div>
+            <div className="space-y-2">
+              <Label>Horario</Label>
+              <Input value={schedule} onChange={(e) => setSchedule(e.target.value)} placeholder="Martes y Jueves 15:00-17:00" />
+            </div>
+            <div className="space-y-2">
+              <Label>Ubicación</Label>
+              <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Edificio de Ingeniería, Lab 201" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={handleCreate}
+              disabled={saving || !name.trim() || !description.trim() || !schedule.trim() || !location.trim()}
+              className="bg-[#0D5E32] text-white hover:bg-[#0D5E32]/90"
+            >
+              {saving ? "Creando..." : "Crear"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
