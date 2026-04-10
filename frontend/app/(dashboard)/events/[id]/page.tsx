@@ -12,10 +12,19 @@ import { Progress } from "@/components/ui/progress"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import {
   ArrowLeft,
   Calendar,
@@ -25,11 +34,15 @@ import {
   Edit,
   Layers,
   Trash2,
+  UserPlus,
+  Search,
+  Check,
 } from "lucide-react"
-import { apiClient as client, type Event, type Club } from "@/lib/sdk/api-client"
+import { apiClient as client, type Event, type Club, type Member } from "@/lib/sdk/api-client"
 import { toast } from "sonner"
 
 type EventWithClub = Event & { club?: Pick<Club, 'id' | 'name'> }
+type Participant = Pick<Member, 'id' | 'name' | 'lastname'>
 
 export default function EventDetailPage() {
   const params = useParams()
@@ -37,6 +50,7 @@ export default function EventDetailPage() {
   const eventId = Number(params.id)
 
   const [event, setEvent] = useState<EventWithClub | null>(null)
+  const [participants, setParticipants] = useState<Participant[]>([])
   const [loading, setLoading] = useState(true)
 
   // Edit dialog
@@ -48,30 +62,62 @@ export default function EventDetailPage() {
   const [editMaxParticipants, setEditMaxParticipants] = useState("")
   const [saving, setSaving] = useState(false)
 
+  // Confirm dialog
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<() => void>(() => {})
+  const [confirmMessage, setConfirmMessage] = useState("")
+
+  function openConfirm(message: string, action: () => void) {
+    setConfirmMessage(message)
+    setConfirmAction(() => action)
+    setConfirmOpen(true)
+  }
+
+  // Add participant dialog
+  const [addOpen, setAddOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState<Member[]>([])
+  const [searching, setSearching] = useState(false)
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null)
+  const [adding, setAdding] = useState(false)
+
   useEffect(() => { loadData() }, [eventId])
+
+  useEffect(() => {
+    if (searchQuery.length < 2) { setSearchResults([]); return }
+    const t = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const res = await client.members.search({ q: searchQuery, limit: 5 })
+        const existingIds = participants.map(p => p.id)
+        setSearchResults((res.data as Member[]).filter(m => !existingIds.includes(m.id)))
+      } finally { setSearching(false) }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchQuery, participants])
 
   async function loadData() {
     try {
-      const eventData = await client.events.getById({ id: eventId })
+      const [eventData, participantsData] = await Promise.all([
+        client.events.getById({ id: eventId }),
+        client.events.getParticipants({ id: eventId }),
+      ])
       setEvent(eventData.data)
-    } finally {
-      setLoading(false)
-    }
+      setParticipants(participantsData.data)
+    } finally { setLoading(false) }
   }
 
   function openEdit() {
     if (!event) return
     setEditName(event.name)
-    setEditDescription(event.description)
-    setEditLocation(event.location)
+    setEditDescription(event.description ?? "")
+    setEditLocation(event.location ?? "")
     setEditMaxParticipants(String(event.max_participants))
-    // Convert ISO to datetime-local format (YYYY-MM-DDTHH:MM)
     setEditDatetime(new Date(event.datetime).toISOString().slice(0, 16))
     setEditOpen(true)
   }
 
   async function handleEdit() {
-    if (!event) return
     setSaving(true)
     try {
       await client.events.update({
@@ -91,12 +137,45 @@ export default function EventDetailPage() {
   }
 
   async function handleDelete() {
-    if (!confirm(`¿Eliminar el evento "${event?.name}"? Esta acción no se puede deshacer.`)) return
+    openConfirm(`¿Eliminar el evento "${event?.name}"?`, async () => {
+      try {
+        await client.events.delete({ id: eventId })
+        toast.success("Evento eliminado")
+        router.push("/events")
+      } catch { toast.error("Error al eliminar") }
+    })
+  }
+
+  async function handleAddParticipant() {
+    if (!selectedMember) return
+    setAdding(true)
     try {
-      await client.events.delete({ id: eventId })
-      toast.success("Evento eliminado")
-      router.push("/events")
-    } catch { toast.error("Error al eliminar el evento") }
+      await client.events.addParticipant({ id: eventId, id_member: selectedMember.id })
+      toast.success("Participante agregado")
+      resetAddModal()
+      loadData()
+    } catch (err: any) {
+      if (err.code === 'EVENT_FULL') toast.error("El evento está lleno")
+      else if (err.code === 'MEMBER_ALREADY_ASSIGNED') toast.error("El miembro ya está registrado")
+      else toast.error("Error al agregar participante")
+    } finally { setAdding(false) }
+  }
+
+  async function handleRemoveParticipant(memberId: number) {
+    openConfirm("¿Remover este participante del evento?", async () => {
+      try {
+        await client.events.removeParticipant({ id: eventId, memberId })
+        toast.success("Participante removido")
+        loadData()
+      } catch { toast.error("Error al remover") }
+    })
+  }
+
+  function resetAddModal() {
+    setAddOpen(false)
+    setSearchQuery("")
+    setSearchResults([])
+    setSelectedMember(null)
   }
 
   if (loading) {
@@ -113,8 +192,9 @@ export default function EventDetailPage() {
   }
 
   const isUpcoming = new Date(event.datetime) > new Date()
-  const currentParticipants = event.current_participants ?? 0
-  const capacityPercentage = (currentParticipants / event.max_participants) * 100
+  const currentParticipants = participants.length
+  const capacityPercentage = Math.min((currentParticipants / event.max_participants) * 100, 100)
+  const isFull = currentParticipants >= event.max_participants
   const eventDate = new Date(event.datetime)
 
   return (
@@ -134,12 +214,10 @@ export default function EventDetailPage() {
           <p className="text-muted-foreground mt-1">{event.description}</p>
         </div>
         <Button variant="outline" onClick={openEdit}>
-          <Edit className="mr-2 h-4 w-4" />
-          Editar
+          <Edit className="mr-2 h-4 w-4" />Editar
         </Button>
         <Button variant="destructive" onClick={handleDelete}>
-          <Trash2 className="mr-2 h-4 w-4" />
-          Eliminar
+          <Trash2 className="mr-2 h-4 w-4" />Eliminar
         </Button>
       </div>
 
@@ -205,6 +283,49 @@ export default function EventDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Participants */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Participantes ({currentParticipants})</CardTitle>
+          <Button
+            onClick={() => setAddOpen(true)}
+            disabled={isFull}
+            className="bg-[#0D5E32] text-white hover:bg-[#0D5E32]/90"
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            {isFull ? 'Evento lleno' : 'Agregar participante'}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {participants.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Apellido</TableHead>
+                  <TableHead className="w-[80px]">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {participants.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell>{p.lastname}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" onClick={() => handleRemoveParticipant(p.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-center text-muted-foreground py-8">No hay participantes registrados.</p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Club */}
       {event.club && (
         <Card>
@@ -225,38 +346,78 @@ export default function EventDetailPage() {
         </Card>
       )}
 
+      {/* Confirm dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Confirmar acción</DialogTitle>
+            <DialogDescription>{confirmMessage}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={() => { setConfirmOpen(false); confirmAction() }}>Confirmar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Edit dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Editar Evento</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Editar Evento</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Nombre</Label>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Descripción</Label>
-              <Input value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Fecha y hora</Label>
-              <Input type="datetime-local" value={editDatetime} onChange={(e) => setEditDatetime(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Ubicación</Label>
-              <Input value={editLocation} onChange={(e) => setEditLocation(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Capacidad máxima</Label>
-              <Input type="number" min="1" value={editMaxParticipants} onChange={(e) => setEditMaxParticipants(e.target.value)} />
-            </div>
+            <div className="space-y-2"><Label>Nombre</Label><Input value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
+            <div className="space-y-2"><Label>Descripción</Label><Input value={editDescription} onChange={(e) => setEditDescription(e.target.value)} /></div>
+            <div className="space-y-2"><Label>Fecha y hora</Label><Input type="datetime-local" value={editDatetime} onChange={(e) => setEditDatetime(e.target.value)} /></div>
+            <div className="space-y-2"><Label>Ubicación</Label><Input value={editLocation} onChange={(e) => setEditLocation(e.target.value)} /></div>
+            <div className="space-y-2"><Label>Capacidad máxima</Label><Input type="number" min="1" value={editMaxParticipants} onChange={(e) => setEditMaxParticipants(e.target.value)} /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
-            <Button onClick={handleEdit} disabled={saving} className="bg-[#0D5E32] text-white hover:bg-[#0D5E32]/90">
-              {saving ? "Guardando..." : "Guardar"}
+            <Button onClick={handleEdit} disabled={saving} className="bg-[#0D5E32] text-white hover:bg-[#0D5E32]/90">{saving ? "Guardando..." : "Guardar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add participant dialog */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Agregar participante</DialogTitle>
+            <DialogDescription>Busca un miembro para registrarlo en el evento</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre..."
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setSelectedMember(null) }}
+                className="pl-10"
+              />
+            </div>
+            {searching && <p className="text-sm text-muted-foreground text-center">Buscando...</p>}
+            {searchResults.length > 0 && (
+              <div className="space-y-2">
+                {searchResults.map((m) => (
+                  <div
+                    key={m.id}
+                    onClick={() => setSelectedMember(m)}
+                    className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${selectedMember?.id === m.id ? 'border-[#0D5E32] bg-[#0D5E32]/5' : 'border-border hover:bg-muted/50'}`}
+                  >
+                    <p className="font-medium">{m.name} {m.lastname}</p>
+                    {selectedMember?.id === m.id && <Check className="h-5 w-5 text-[#0D5E32]" />}
+                  </div>
+                ))}
+              </div>
+            )}
+            {searchQuery.length >= 2 && !searching && searchResults.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center">No se encontraron miembros</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={resetAddModal}>Cancelar</Button>
+            <Button onClick={handleAddParticipant} disabled={!selectedMember || adding} className="bg-[#0D5E32] text-white hover:bg-[#0D5E32]/90">
+              {adding ? 'Agregando...' : 'Agregar'}
             </Button>
           </DialogFooter>
         </DialogContent>

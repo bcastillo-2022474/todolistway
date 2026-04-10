@@ -1,14 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   Calendar,
   Layers,
+  LogOut,
 } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -17,6 +19,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { clearToken } from "@/lib/auth"
 
 const navigation = [
   {
@@ -33,6 +36,12 @@ const navigation = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+
+  function handleLogout() {
+    clearToken()
+    router.replace('/login')
+  }
 
   return (
     <Sidebar>
@@ -71,6 +80,15 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="border-t border-sidebar-border p-4">
+        <button
+          onClick={handleLogout}
+          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+        >
+          <LogOut className="h-4 w-4" />
+          <span>Cerrar sesión</span>
+        </button>
+      </SidebarFooter>
     </Sidebar>
   )
 }

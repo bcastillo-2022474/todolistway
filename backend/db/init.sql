@@ -43,3 +43,11 @@ CREATE TABLE IF NOT EXISTS event (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT fk_event_club FOREIGN KEY (id_club) REFERENCES club(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS event_participant (
+    id_event  INT NOT NULL,
+    id_member INT NOT NULL,
+    PRIMARY KEY (id_event, id_member),
+    CONSTRAINT fk_ep_event  FOREIGN KEY (id_event)  REFERENCES event(id)  ON DELETE CASCADE,
+    CONSTRAINT fk_ep_member FOREIGN KEY (id_member) REFERENCES member(id) ON DELETE CASCADE
+);

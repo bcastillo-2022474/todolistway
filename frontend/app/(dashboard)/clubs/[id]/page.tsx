@@ -56,6 +56,17 @@ export default function ClubDetailPage() {
   const [newMemberLastname, setNewMemberLastname] = useState("")
   const [isCreating, setIsCreating] = useState(false)
 
+  // Confirm dialog
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<() => void>(() => {})
+  const [confirmMessage, setConfirmMessage] = useState("")
+
+  function openConfirm(message: string, action: () => void) {
+    setConfirmMessage(message)
+    setConfirmAction(() => action)
+    setConfirmOpen(true)
+  }
+
   // Edit club dialog
   const [editOpen, setEditOpen] = useState(false)
   const [editName, setEditName] = useState("")
@@ -109,11 +120,12 @@ export default function ClubDetailPage() {
   }
 
   async function handleRemoveMember(memberId: number) {
-    if (!confirm("¿Remover este miembro del club?")) return
-    try {
-      await client.clubs.removeMember({ clubId, memberId })
-      await loadData()
-    } catch { toast.error("Error al remover miembro") }
+    openConfirm("¿Remover este miembro del club?", async () => {
+      try {
+        await client.clubs.removeMember({ clubId, memberId })
+        await loadData()
+      } catch { toast.error("Error al remover miembro") }
+    })
   }
 
   function resetModal() {
@@ -140,12 +152,13 @@ export default function ClubDetailPage() {
   }
 
   async function handleDelete() {
-    if (!confirm(`¿Eliminar el club "${club?.name}"? Esta acción no se puede deshacer.`)) return
-    try {
-      await client.clubs.delete({ id: clubId })
-      toast.success("Club eliminado")
-      router.push("/clubs")
-    } catch { toast.error("Error al eliminar el club") }
+    openConfirm(`¿Eliminar el club "${club?.name}"? Esta acción no se puede deshacer.`, async () => {
+      try {
+        await client.clubs.delete({ id: clubId })
+        toast.success("Club eliminado")
+        router.push("/clubs")
+      } catch { toast.error("Error al eliminar el club") }
+    })
   }
 
   if (loading) {
@@ -317,6 +330,20 @@ export default function ClubDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Confirm dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Confirmar acción</DialogTitle>
+            <DialogDescription>{confirmMessage}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={() => { setConfirmOpen(false); confirmAction() }}>Confirmar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

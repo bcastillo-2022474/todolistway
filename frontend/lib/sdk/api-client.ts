@@ -142,6 +142,15 @@ const eventsModule = {
 
   delete: (payload: GetByIdPayload): Promise<DeleteResponse> =>
     del(`/events/${payload.id}`),
+
+  getParticipants: (payload: GetByIdPayload): Promise<{ data: Pick<Member, 'id' | 'name' | 'lastname'>[] }> =>
+    get(`/events/${payload.id}/participants`),
+
+  addParticipant: (payload: { id: number; id_member: number }): Promise<{ message: string }> =>
+    post(`/events/${payload.id}/participants`, { id_member: payload.id_member }),
+
+  removeParticipant: (payload: { id: number; memberId: number }): Promise<{ message: string }> =>
+    del(`/events/${payload.id}/participants/${payload.memberId}`),
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
