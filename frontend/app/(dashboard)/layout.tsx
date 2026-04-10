@@ -1,12 +1,25 @@
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
-import { Separator } from "@/components/ui/separator"
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
+import { AppSidebar } from '@/components/app-sidebar'
+import { Separator } from '@/components/ui/separator'
+import { getToken } from '@/lib/auth'
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!getToken()) router.replace('/login')
+  }, [])
+
+  if (typeof window !== 'undefined' && !getToken()) return null
+
   return (
     <SidebarProvider>
       <AppSidebar />
