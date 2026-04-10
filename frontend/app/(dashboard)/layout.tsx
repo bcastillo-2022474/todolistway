@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -13,12 +13,17 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    if (!getToken()) router.replace('/login')
+    if (!getToken()) {
+      router.replace('/login')
+    } else {
+      setReady(true)
+    }
   }, [])
 
-  if (typeof window !== 'undefined' && !getToken()) return null
+  if (!ready) return null
 
   return (
     <SidebarProvider>

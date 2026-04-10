@@ -1,17 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { apiClient, setToken } from '@/lib/sdk/api-client'
-import { saveToken } from '@/lib/auth'
+import { saveToken, getToken } from '@/lib/auth'
 
 export default function LoginPage() {
   const router = useRouter()
   const [password, setPassword] = useState('')
+
+  useEffect(() => {
+    if (getToken()) router.replace('/clubs')
+  }, [])
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(false)
 
