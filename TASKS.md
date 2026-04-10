@@ -131,9 +131,14 @@ Add the Members link to the sidebar (`components/app-sidebar.tsx`):
 
 ### Admin login page
 
-- Simple centered form: email + password → `apiClient.admin.login`
-- On success: save token (see below), redirect to `/clubs`
-- Show error message on 401
+No user accounts — just a single hardcoded password set in the backend `.env` (`ADMIN_PASSWORD`).
+
+- Simple centered form: **one password field only**
+- POST to `apiClient.admin.login({ password })` — the backend checks it against `process.env.ADMIN_PASSWORD` and returns a JWT
+- On success: save token to `localStorage`, redirect to `/clubs`
+- On 401: show "Contraseña incorrecta"
+
+> The login is already fully implemented on the backend — nothing left to do there.
 
 ### Auth token helpers (`lib/auth.ts`)
 
@@ -144,6 +149,8 @@ export const clearToken = () => localStorage.removeItem('token')
 ```
 
 Call `setToken(getToken())` from `api-client.ts` on app load (e.g. in `app/layout.tsx`).
+
+> To log out: call `clearToken()` + `setToken(null)` + redirect to `/login`.
 
 ### Switch from mock to real API
 

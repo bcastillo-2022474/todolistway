@@ -147,8 +147,8 @@ const eventsModule = {
 // ── Admin ─────────────────────────────────────────────────────────────────────
 
 export const adminModule = {
-  login: (payload: { email: string; password: string }) =>
-    post<{ data: { admin: Member; token: string }; message: string }>('/admin/login', payload),
+  login: (payload: { password: string }) =>
+    post<{ data: { token: string }; message: string }>('/admin/login', payload),
 
   logout: () =>
     post<{ message: string }>('/admin/logout'),

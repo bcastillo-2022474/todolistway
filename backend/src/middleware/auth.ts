@@ -2,16 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AppError } from '../types';
 
-export interface AuthPayload {
-  id: number;
-  email: string;
-}
-
-// Extend Express Request to carry the decoded admin payload
 declare global {
   namespace Express {
     interface Request {
-      admin?: AuthPayload;
+      admin?: { role: string };
     }
   }
 }
@@ -24,7 +18,7 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
 
   const token = header.slice(7);
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET as string) as AuthPayload;
+    const payload = jwt.verify(token, process.env.JWT_SECRET as string) as { role: string };
     req.admin = payload;
     next();
   } catch {
