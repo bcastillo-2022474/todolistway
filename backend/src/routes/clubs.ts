@@ -324,7 +324,7 @@ router.get('/:id/events', async (_req: Request, res: Response, next: NextFunctio
       `SELECT
          e.*,
          json_build_object('id', c.id, 'name', c.name) AS club,
-         (SELECT COUNT(*) FROM event_participant ep WHERE ep.id_event = e.id)::int AS current_participants
+         0 AS current_participants
        FROM event e
        JOIN club c ON c.id = e.id_club
        WHERE e.id_club = $1

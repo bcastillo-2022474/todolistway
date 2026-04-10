@@ -44,7 +44,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       SELECT
         e.*,
         json_build_object('id', c.id, 'name', c.name) AS club,
-        (SELECT COUNT(*) FROM event_participant ep WHERE ep.id_event = e.id)::int AS current_participants
+        0 AS current_participants
       FROM event e
       JOIN club c ON c.id = e.id_club
       ${whereClause}
@@ -79,7 +79,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
       `SELECT
          e.*,
          json_build_object('id', c.id, 'name', c.name) AS club,
-         (SELECT COUNT(*) FROM event_participant ep WHERE ep.id_event = e.id)::int AS current_participants
+         0 AS current_participants
        FROM event e
        JOIN club c ON c.id = e.id_club
        WHERE e.id = $1`,
