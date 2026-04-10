@@ -72,16 +72,27 @@ export type ErrorCode =
   | 'EVENT_NOT_FOUND'
   | 'MEMBER_ALREADY_ASSIGNED'
   | 'MEMBER_HAS_CLUBS'
+  | 'INVALID_CREDENTIALS'  
   | 'INTERNAL_ERROR';
 
+// src/types.ts
 export class AppError extends Error {
   constructor(
-    public readonly message: string,
-    public readonly status: number,
-    public readonly code: ErrorCode,
-    public readonly details?: Record<string, string>,
+    message: string,
+    public status: number,
+    public code: string,
+    public details?: Record<string, string | undefined>
   ) {
-    super(message);
-    this.name = 'AppError';
+    super(message)
+    this.name = 'AppError'
+  }
+}
+
+// Extiende Express Request para req.admin
+declare global {
+  namespace Express {
+    interface Request {
+      admin?: { role: 'admin'}
+    }
   }
 }

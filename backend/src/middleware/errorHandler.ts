@@ -1,22 +1,20 @@
-import { Request, Response, NextFunction } from 'express';
-import { AppError } from '../types';
+import { Request, Response, NextFunction } from 'express'
+import { AppError } from '../types'
 
-export function errorHandler(
+export const errorHandler = (
   err: unknown,
   _req: Request,
   res: Response,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _next: NextFunction,
-): void {
+  _next: NextFunction
+) => {
   if (err instanceof AppError) {
-    res.status(err.status).json({
-      error: err.message,
-      code: err.code,
-      ...(err.details ? { details: err.details } : {}),
-    });
-    return;
+    return res.status(err.status).json({
+      error:   err.message,
+      code:    err.code,
+      ...(err.details && { details: err.details }),
+    })
   }
 
-  console.error(err);
-  res.status(500).json({ error: 'Internal Server Error', code: 'INTERNAL_ERROR' });
+  console.error(err)
+  res.status(500).json({ error: 'Internal server error', code: 'INTERNAL_ERROR' })
 }
