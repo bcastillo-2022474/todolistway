@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import pool from '../config/database'
-import { Club, AppError } from '../types';
+import { Club, AppError, ClubMember } from '../types';
 
 const router = Router();
 
@@ -158,33 +158,150 @@ router.delete('/:id', async (_req: Request, res: Response, next: NextFunction) =
 // GET /api/v1/clubs/:id/members?page&limit
 router.get('/:id/members', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // TODO: implement
-    res.json({ data: [], total: 0, page: 1, limit: 20, total_pages: 0 });
-  } catch (err) { next(err); }
+    const clubId = _req.params.id;
+    const page   = Math.max(1, parseInt(_req.query.page  as string) || 1);
+    const limit  = Math.max(1, parseInt(_req.query.limit as string) || 20);
+    const offset = (page - 1) * limit;
+ 
+    // 404 if club doesn't exist
+    const clubCheck = await pool.query('SELECT id FROM club WHERE id = $1', [clubId]);
+    if (!clubCheck.rows[0]) {
+      throw new AppError('Club not found', 404, 'CLUB_NOT_FOUND');
+    }
+ 
+    const [dataResult, countResult] = await Promise.all([
+      pool.query<ClubMember>(
+        `SELECT
+           cm.id_member, cm.id_club, cm.date_assign,
+           json_build_object('id', m.id, 'name', m.name, 'lastname', m.lastname) AS member
+         FROM club_member cm
+         JOIN member m ON m.id = cm.id_member
+         WHERE cm.id_club = $1
+         ORDER BY cm.date_assign DESC
+         LIMIT $2 OFFSET $3`,
+        [clubId, limit, offset],
+      ),
+      pool.query<{ count: string }>(
+        'SELECT COUNT(*) FROM club_member WHERE id_club = $1',
+        [clubId],
+      ),
+    ]);
+ 
+    const total       = parseInt(countResult.rows[0].count);
+    const total_pages = Math.ceil(total / limit);
+ 
+    res.json({ data: dataResult.rows, total, page, limit, total_pages });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // POST /api/v1/clubs/:id/members  — body: { id_member }
 router.post('/:id/members', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // TODO: implement
-    res.status(201).json({ data: null, message: 'Member assigned to club successfully' });
-  } catch (err) { next(err); }
+    const clubId   = _req.params.id;
+    const { id_member } = _req.body;
+ 
+    if (!id_member) {
+      throw new AppError('Validation error', 400, 'VALIDATION_ERROR', { id_member: 'id_member is required' });
+    }
+ 
+    // 404 if club doesn't exist
+    const clubCheck = await pool.query('SELECT id FROM club WHERE id = $1', [clubId]);
+    if (!clubCheck.rows[0]) {
+      throw new AppError('Club not found', 404, 'CLUB_NOT_FOUND');
+    }
+ 
+    try {
+      const result = await pool.query<ClubMember>(
+        `INSERT INTO club_member (id_member, id_club)
+         VALUES ($1, $2)
+         RETURNING *`,
+        [id_member, clubId],
+      );
+      res.status(201).json({ data: result.rows[0], message: 'Member assigned to club successfully' });
+    } catch (dbErr: any) {
+      // PostgreSQL unique / PK violation → code 23505
+      if (dbErr.code === '23505') {
+        throw new AppError('Member already assigned to this club', 409, 'MEMBER_ALREADY_ASSIGNED');
+      }
+      throw dbErr;
+    }
+  } catch (err) {
+    next(err);
+  }
 });
 
 // POST /api/v1/clubs/:id/members/create-and-assign  — body: { name, lastname }
 router.post('/:id/members/create-and-assign', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // TODO: implement
-    res.status(201).json({ data: null, message: 'Member created and assigned to club successfully' });
-  } catch (err) { next(err); }
+    const clubId = _req.params.id;
+    const { name, lastname } = _req.body;
+ 
+    const errors: Record<string, string> = {};
+    if (!name     || typeof name     !== 'string') errors.name     = 'name is required';
+    if (!lastname || typeof lastname !== 'string') errors.lastname = 'lastname is required';
+    if (Object.keys(errors).length) {
+      throw new AppError('Validation error', 400, 'VALIDATION_ERROR', errors);
+    }
+ 
+    // 404 if club doesn't exist
+    const clubCheck = await pool.query('SELECT id FROM club WHERE id = $1', [clubId]);
+    if (!clubCheck.rows[0]) {
+      throw new AppError('Club not found', 404, 'CLUB_NOT_FOUND');
+    }
+ 
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+ 
+      const memberResult = await client.query(
+        `INSERT INTO member (name, lastname) VALUES ($1, $2) RETURNING *`,
+        [name, lastname],
+      );
+      const newMember = memberResult.rows[0];
+ 
+      const assignResult = await client.query(
+        `INSERT INTO club_member (id_member, id_club) VALUES ($1, $2) RETURNING *`,
+        [newMember.id, clubId],
+      );
+      const assignment = assignResult.rows[0];
+ 
+      await client.query('COMMIT');
+ 
+      res.status(201).json({
+        data: { member: newMember, assignment },
+        message: 'Member created and assigned to club successfully',
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
 });
 
 // DELETE /api/v1/clubs/:id/members/:memberId
 router.delete('/:id/members/:memberId', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // TODO: implement
+    const { id: clubId, memberId } = _req.params;
+ 
+    const result = await pool.query(
+      `DELETE FROM club_member WHERE id_club = $1 AND id_member = $2 RETURNING *`,
+      [clubId, memberId],
+    );
+ 
+    if (!result.rows[0]) {
+      throw new AppError('Member not found in this club', 404, 'MEMBER_NOT_FOUND');
+    }
+ 
     res.json({ message: 'Member removed from club successfully' });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ── Club events ───────────────────────────────────────────────────────────────
@@ -192,9 +309,34 @@ router.delete('/:id/members/:memberId', async (_req: Request, res: Response, nex
 // GET /api/v1/clubs/:id/events?upcoming
 router.get('/:id/events', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // TODO: implement
-    res.json({ data: [] });
-  } catch (err) { next(err); }
+    const clubId   = _req.params.id;
+    const upcoming = _req.query.upcoming === 'true' || _req.query.upcoming === '1';
+ 
+    // 404 if club doesn't exist
+    const clubCheck = await pool.query('SELECT id FROM club WHERE id = $1', [clubId]);
+    if (!clubCheck.rows[0]) {
+      throw new AppError('Club not found', 404, 'CLUB_NOT_FOUND');
+    }
+ 
+    const upcomingClause = upcoming ? `AND e.datetime > NOW()` : '';
+ 
+    const result = await pool.query(
+      `SELECT
+         e.*,
+         json_build_object('id', c.id, 'name', c.name) AS club,
+         (SELECT COUNT(*) FROM event_participant ep WHERE ep.id_event = e.id)::int AS current_participants
+       FROM event e
+       JOIN club c ON c.id = e.id_club
+       WHERE e.id_club = $1
+       ${upcomingClause}
+       ORDER BY e.datetime ASC`,
+      [clubId],
+    );
+ 
+    res.json({ data: result.rows });
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;
